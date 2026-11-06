@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Monitor de Sensores</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --roseta:     #7E8C69;
+      --cambridge:  #9CAD8C;
+      --cherry:     #F6B0BB;
+      --tea:        #F1C8CB;
+      --champagne:  #ECE0DA;
+      --dark:       #4a3f3a;
+      --mid:        #7a6e69;
+      --light-bg:   #faf6f4;
+    }
+
+    body {
+      background: var(--light-bg);
+      color: var(--dark);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      padding: 2rem 2rem 3rem;
+    }
+
+    /* ── HEADER ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 2.5rem;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--cherry);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-icon svg {
+      width: 20px; height: 20px;
+      stroke: #fff; fill: none; stroke-width: 1.8;
+    }
+
+    .logo-text h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.4rem;
+      font-weight: 400;
+      color: var(--dark);
+      letter-spacing: 0.02em;
+    }
+
+    .logo-text p {
+      font-size: 0.7rem;
+      color: var(--mid);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-top: 1px;
+    }
+
+    #status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: white;
+      border: 1px solid var(--champagne);
+      border-radius: 999px;
+      padding: 0.4rem 1rem;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      color: var(--mid);
+    }
+
+    #status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #d4a5a5;
+      transition: background 0.4s;
+      flex-shrink: 0;
+    }
+
+    #status-dot.connected {
+      background: var(--roseta);
+      box-shadow: 0 0 0 3px rgba(126,140,105,0.2);
+    }
+
+    /* ── METRICS ── */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card {
+      background: white;
+      border: 1px solid var(--champagne);
+      border-radius: 20px;
+      padding: 1.4rem 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card-deco {
+      position: absolute;
+      top: -18px; right: -18px;
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      opacity: 0.18;
+    }
+
+    .card.temp .card-deco  { background: var(--cherry); }
+    .card.hum .card-deco   { background: var(--cambridge); }
+    .card.time .card-deco  { background: var(--tea); }
+    .card.total .card-deco { background: var(--champagne); }
+
+    .card-label {
+      font-size: 0.65rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--mid);
+      margin-bottom: 0.6rem;
+      font-weight: 500;
+    }
+
+    .card-value {
+      font-family: 'DM Serif Display', serif;
+      font-size: 2.4rem;
+      line-height: 1;
+      margin-bottom: 0.2rem;
+    }
+
+    .card.temp .card-value  { color: #c47585; }
+    .card.hum .card-value   { color: var(--roseta); }
+    .card.time .card-value  { color: var(--dark); font-size: 1.05rem; font-family: 'DM Sans', sans-serif; font-weight: 500; padding-top: 0.5rem; }
+    .card.total .card-value { color: var(--dark); font-size: 2rem; }
+
+    .card-unit {
+      font-size: 0.72rem;
+      color: var(--mid);
+    }
+
+    /* ── CHART ── */
+    .chart-wrap {
+      background: white;
+      border: 1px solid var(--champagne);
+      border-radius: 20px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .chart-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.25rem;
+    }
+
+    .chart-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1rem;
+      color: var(--dark);
+      font-weight: 400;
+    }
+
+    .legend {
+      display: flex;
+      gap: 1.2rem;
+      font-size: 0.7rem;
+      color: var(--mid);
+    }
+
+    .legend span {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .legend-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+    }
+
+    .chart-canvas-wrap {
+      position: relative;
+      height: 240px;
+    }
+
+    /* ── TABLE ── */
+    .table-wrap {
+      background: white;
+      border: 1px solid var(--champagne);
+      border-radius: 20px;
+      overflow: hidden;
+    }
+
+    .table-header {
+      padding: 1.1rem 1.5rem;
+      border-bottom: 1px solid var(--champagne);
+    }
+
+    .table-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1rem;
+      color: var(--dark);
+      font-weight: 400;
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+
+    th {
+      text-align: left;
+      padding: 0.55rem 1.5rem;
+      font-size: 0.63rem;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--mid);
+      border-bottom: 1px solid var(--champagne);
+      font-weight: 500;
+    }
+
+    td {
+      padding: 0.75rem 1.5rem;
+      border-bottom: 1px solid rgba(236,224,218,0.5);
+      color: var(--dark);
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(246,176,187,0.05); }
+
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.65rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 500;
+    }
+
+    .badge.hot   { background: rgba(246,176,187,0.25); color: #b0606e; }
+    .badge.cold  { background: rgba(156,173,140,0.2);  color: var(--roseta); }
+    .badge.ok    { background: rgba(241,200,203,0.3);  color: #a06070; }
+
+    @keyframes flash {
+      0%   { opacity: 1; }
+      50%  { opacity: 0.4; }
+      100% { opacity: 1; }
+    }
+    .flash { animation: flash 0.5s ease; }
+
+    /* ── DIVIDER ── */
+    .section-divider {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin: 0.25rem 0 1.25rem;
+    }
+    .section-divider span {
+      font-size: 0.62rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--mid);
+      white-space: nowrap;
+      font-weight: 500;
+    }
+    .section-divider::before,
+    .section-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--champagne);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 3v11a3 3 0 006 0V3M6 21h12"/>
+        </svg>
+      </div>
+      <div class="logo-text">
+        <h1>Sensor Monitor</h1>
+        <p>ESP32 · DHT11 · tiempo real</p>
+      </div>
+    </div>
+    <div id="status">
+      <div id="status-dot"></div>
+      <span id="status-text">Desconectado</span>
+    </div>
+  </header>
+
+  <div class="metrics">
+    <div class="card temp">
+      <div class="card-deco"></div>
+      <div class="card-label">Temperatura</div>
+      <div class="card-value" id="val-temp">--</div>
+      <div class="card-unit">grados Celsius</div>
+    </div>
+    <div class="card hum">
+      <div class="card-deco"></div>
+      <div class="card-label">Humedad</div>
+      <div class="card-value" id="val-hum">--</div>
+      <div class="card-unit">porcentaje relativo</div>
+    </div>
+    <div class="card time">
+      <div class="card-deco"></div>
+      <div class="card-label">Última lectura</div>
+      <div class="card-value" id="val-time">--</div>
+      <div class="card-unit">hora del servidor</div>
+    </div>
+    <div class="card total">
+      <div class="card-deco"></div>
+      <div class="card-label">Lecturas recibidas</div>
+      <div class="card-value" id="val-count">0</div>
+      <div class="card-unit">en esta sesión</div>
+    </div>
+  </div>
+
+  <div class="section-divider"><span>Histórico en tiempo real</span></div>
+
+  <div class="chart-wrap">
+    <div class="chart-header">
+      <div class="chart-title">Temperatura & Humedad</div>
+      <div class="legend">
+        <span><span class="legend-dot" style="background:#c47585"></span> Temp. °C</span>
+        <span><span class="legend-dot" style="background:#9CAD8C"></span> Humedad %</span>
+      </div>
+    </div>
+    <div class="chart-canvas-wrap">
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+
+  <div class="section-divider"><span>Historial reciente</span></div>
+
+  <div class="table-wrap">
+    <div class="table-header">
+      <div class="table-title">Registro de lecturas</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Hora</th>
+          <th>Temperatura</th>
+          <th>Humedad</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-body">
+        <tr><td colspan="5" style="text-align:center;color:var(--mid);padding:2.5rem;font-size:0.85rem;">
+          Esperando datos del sensor ✿
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const API_URL = 'http://192.168.0.13:5000';
+    const HUB_URL = `${API_URL}/hubs/sensores`;
+    const MAX_PUNTOS = 30;
+    const MAX_FILAS  = 20;
+
+    let conteo   = 0;
+    let labelsG  = [];
+    let tempData = [];
+    let humData  = [];
+
+    const ctx = document.getElementById('chart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labelsG,
+        datasets: [
+          {
+            label: 'Temperatura °C',
+            data: tempData,
+            borderColor: '#c47585',
+            backgroundColor: 'rgba(246,176,187,0.12)',
+            borderWidth: 2,
+            pointRadius: 3,
+            pointBackgroundColor: '#c47585',
+            tension: 0.45,
+            fill: true,
+          },
+          {
+            label: 'Humedad %',
+            data: humData,
+            borderColor: '#9CAD8C',
+            backgroundColor: 'rgba(156,173,140,0.1)',
+            borderWidth: 2,
+            pointRadius: 3,
+            pointBackgroundColor: '#9CAD8C',
+            tension: 0.45,
+            fill: true,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: {
+            ticks: { color: '#a8999a', font: { family: 'DM Sans', size: 11 }, maxTicksLimit: 10 },
+            grid:  { color: 'rgba(236,224,218,0.6)' },
+            border: { color: 'rgba(236,224,218,0.8)' }
+          },
+          y: {
+            ticks: { color: '#a8999a', font: { family: 'DM Sans', size: 11 } },
+            grid:  { color: 'rgba(236,224,218,0.6)' },
+            border: { color: 'rgba(236,224,218,0.8)' }
+          }
+        }
+      }
+    });
+
+    function estadoBadge(temp) {
+      if (temp >= 35) return `<span class="badge hot">Caliente</span>`;
+      if (temp <= 15) return `<span class="badge cold">Frío</span>`;
+      return `<span class="badge ok">Normal</span>`;
+    }
+
+    function formatFecha(iso) {
+      const d = new Date(iso);
+      return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function flashEl(id) {
+      const el = document.getElementById(id);
+      el.classList.remove('flash');
+      void el.offsetWidth;
+      el.classList.add('flash');
+    }
+
+    function procesarLectura(lectura) {
+      conteo++;
+      const { temperatura, humedad, fecha } = lectura;
+      const hora = formatFecha(fecha);
+
+      document.getElementById('val-temp').textContent  = temperatura.toFixed(1);
+      document.getElementById('val-hum').textContent   = humedad.toFixed(1);
+      document.getElementById('val-time').textContent  = hora;
+      document.getElementById('val-count').textContent = conteo;
+      flashEl('val-temp');
+      flashEl('val-hum');
+
+      labelsG.push(hora);
+      tempData.push(temperatura);
+      humData.push(humedad);
+      if (labelsG.length > MAX_PUNTOS) { labelsG.shift(); tempData.shift(); humData.shift(); }
+      chart.update();
+
+      const tbody  = document.getElementById('tabla-body');
+      const newRow = document.createElement('tr');
+      newRow.innerHTML = `
+        <td style="color:var(--mid);font-size:0.78rem">${conteo}</td>
+        <td>${hora}</td>
+        <td style="color:#c47585;font-weight:500">${temperatura.toFixed(1)} °C</td>
+        <td style="color:var(--roseta);font-weight:500">${humedad.toFixed(1)} %</td>
+        <td>${estadoBadge(temperatura)}</td>
+      `;
+      if (tbody.rows[0] && tbody.rows[0].cells.length === 1) tbody.innerHTML = '';
+      tbody.insertBefore(newRow, tbody.firstChild);
+      while (tbody.rows.length > MAX_FILAS) tbody.deleteRow(tbody.rows.length - 1);
+    }
+
+    async function cargarHistorial() {
+      try {
+        const res = await fetch(`${API_URL}/lecturas`);
+        if (!res.ok) return;
+        const json = await res.json();
+        const datos = json.lecturas ?? json;
+        [...datos].reverse().forEach(procesarLectura);
+      } catch (e) {
+        console.warn('No se pudo cargar historial:', e);
+      }
+    }
+
+    const dot  = document.getElementById('status-dot');
+    const stxt = document.getElementById('status-text');
+
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl(HUB_URL, { withCredentials: false })
+      .withAutomaticReconnect()
+      .build();
+
+    connection.on('RecibirLectura', procesarLectura);
+    connection.onreconnecting(() => { dot.classList.remove('connected'); stxt.textContent = 'Reconectando...'; });
+    connection.onreconnected(() => { dot.classList.add('connected'); stxt.textContent = 'En vivo'; });
+    connection.onclose(() => { dot.classList.remove('connected'); stxt.textContent = 'Desconectado'; });
+
+    async function iniciar() {
+      try {
+        await connection.start();
+        dot.classList.add('connected');
+        stxt.textContent = 'En vivo';
+        await cargarHistorial();
+      } catch (e) {
+        stxt.textContent = 'Error de conexión';
+        console.error('SignalR error:', e);
+        setTimeout(iniciar, 5000);
+      }
+    }
+
+    iniciar();
+  </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+@SensoresApi_HostAddress = http://localhost:5287
+
+GET {{SensoresApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
